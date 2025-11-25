@@ -6,6 +6,12 @@ module.exports = gql`
     username: String!
     email: String!
     role: Role!
+    password: String
+  }
+
+  type AuthPayload {
+    token: String!
+    user: User!
   }
 
   enum Role {
@@ -19,5 +25,11 @@ module.exports = gql`
   type Query {
     users: [User!]!
     user(id: ID!): User
+    me: User
+  }
+
+  type Mutation {
+    login(username: String!, password: String!): AuthPayload
+    register(username: String!, password: String!, email: String!): AuthPayload
   }
 `;

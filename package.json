@@ -1,6 +1,6 @@
 {
   "name": "vulnerable-graphql-api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Healthcare GraphQL API used as a security testbed.",
   "main": "src/server.js",
   "scripts": {
@@ -14,7 +14,10 @@
   "license": "UNLICENSED",
   "dependencies": {
     "apollo-server": "^3.13.0",
-    "graphql": "^16.8.1"
+    "bcryptjs": "^2.4.3",
+    "graphql": "^16.8.1",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
