@@ -59,6 +59,9 @@ module.exports = gql`
     patients: [Patient!]!
     patient(id: ID!): Patient
     patientBySSN(ssn: String!): Patient
+
+    searchPatients(query: String!): [Patient]
+    searchUsers(filter: String!): [User]
   }
 
   type Mutation {

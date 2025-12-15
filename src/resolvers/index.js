@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const store = require('../db/store');
 const { signToken } = require('../auth/jwt');
+const { search } = require('../services/search');
 
 module.exports = {
   Query: {
@@ -11,7 +12,10 @@ module.exports = {
 
     patients: () => store.patients,
     patient: (_, { id }) => store.patients.find(p => p.id === id),
-    patientBySSN: (_, { ssn }) => store.patients.find(p => p.ssn === ssn)
+    patientBySSN: (_, { ssn }) => store.patients.find(p => p.ssn === ssn),
+
+    searchPatients: (_, { query }) => search('patients', query),
+    searchUsers: (_, { filter }) => search('users', filter)
   },
 
   Mutation: {
