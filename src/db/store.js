@@ -76,7 +76,20 @@ const patients = [
   }
 ];
 
+const appointments = [
+  { id: '1', patientId: '1', doctorId: '2', date: '2024-01-15', time: '09:00', reason: 'Annual checkup', status: 'SCHEDULED' },
+  { id: '2', patientId: '2', doctorId: '2', date: '2024-01-16', time: '10:30', reason: 'Follow-up', status: 'SCHEDULED' },
+  { id: '3', patientId: '3', doctorId: '2', date: '2024-01-17', time: '14:00', reason: 'Heart monitoring', status: 'SCHEDULED' }
+];
+
+const prescriptions = [
+  { id: '1', patientId: '1', doctorId: '2', medication: 'Metformin', dosage: '500mg', frequency: 'Twice daily', date: '2024-01-01' },
+  { id: '2', patientId: '3', doctorId: '2', medication: 'Lisinopril', dosage: '10mg', frequency: 'Once daily', date: '2024-01-05' }
+];
+
 module.exports = {
   users,
-  patients
+  patients,
+  appointments,
+  prescriptions
 };

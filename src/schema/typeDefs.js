@@ -22,6 +22,28 @@ module.exports = gql`
     balance: Float!
     medicalHistory: String!
     primaryDoctor: User
+    appointments: [Appointment]
+    prescriptions: [Prescription]
+  }
+
+  type Appointment {
+    id: ID!
+    patient: Patient!
+    doctor: User!
+    date: String!
+    time: String!
+    reason: String!
+    status: AppointmentStatus!
+  }
+
+  type Prescription {
+    id: ID!
+    patient: Patient!
+    doctor: User!
+    medication: String!
+    dosage: String!
+    frequency: String!
+    date: String!
   }
 
   type AuthPayload {
@@ -35,6 +57,13 @@ module.exports = gql`
     NURSE
     PATIENT
     GUEST
+  }
+
+  enum AppointmentStatus {
+    SCHEDULED
+    COMPLETED
+    CANCELLED
+    NO_SHOW
   }
 
   input PatientInput {
@@ -62,6 +91,12 @@ module.exports = gql`
 
     searchPatients(query: String!): [Patient]
     searchUsers(filter: String!): [User]
+
+    appointments: [Appointment!]!
+    appointment(id: ID!): Appointment
+
+    prescriptions: [Prescription!]!
+    prescription(id: ID!): Prescription
   }
 
   type Mutation {
@@ -71,5 +106,12 @@ module.exports = gql`
     createPatient(input: PatientInput!): Patient
     updatePatient(id: ID!, input: PatientInput!): Patient
     deletePatient(id: ID!): Boolean
+
+    createAppointment(patientId: ID!, doctorId: ID!, date: String!, time: String!, reason: String!): Appointment
+    updateAppointment(id: ID!, status: AppointmentStatus): Appointment
+    deleteAppointment(id: ID!): Boolean
+
+    createPrescription(patientId: ID!, medication: String!, dosage: String!, frequency: String!): Prescription
+    deletePrescription(id: ID!): Boolean
   }
 `;

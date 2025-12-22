@@ -15,7 +15,13 @@ module.exports = {
     patientBySSN: (_, { ssn }) => store.patients.find(p => p.ssn === ssn),
 
     searchPatients: (_, { query }) => search('patients', query),
-    searchUsers: (_, { filter }) => search('users', filter)
+    searchUsers: (_, { filter }) => search('users', filter),
+
+    appointments: () => store.appointments,
+    appointment: (_, { id }) => store.appointments.find(a => a.id === id),
+
+    prescriptions: () => store.prescriptions,
+    prescription: (_, { id }) => store.prescriptions.find(p => p.id === id)
   },
 
   Mutation: {
@@ -64,10 +70,71 @@ module.exports = {
       if (idx === -1) return false;
       store.patients.splice(idx, 1);
       return true;
+    },
+
+    createAppointment: (_, { patientId, doctorId, date, time, reason }) => {
+      const appt = {
+        id: uuidv4(),
+        patientId,
+        doctorId,
+        date,
+        time,
+        reason,
+        status: 'SCHEDULED'
+      };
+      store.appointments.push(appt);
+      return appt;
+    },
+
+    updateAppointment: (_, { id, status }) => {
+      const appt = store.appointments.find(a => a.id === id);
+      if (!appt) throw new Error('Appointment not found');
+      if (status) appt.status = status;
+      return appt;
+    },
+
+    deleteAppointment: (_, { id }) => {
+      const idx = store.appointments.findIndex(a => a.id === id);
+      if (idx === -1) return false;
+      store.appointments.splice(idx, 1);
+      return true;
+    },
+
+    createPrescription: (_, { patientId, medication, dosage, frequency }) => {
+      const rx = {
+        id: uuidv4(),
+        patientId,
+        doctorId: '2',
+        medication,
+        dosage,
+        frequency,
+        date: new Date().toISOString().split('T')[0]
+      };
+      store.prescriptions.push(rx);
+      return rx;
+    },
+
+    deletePrescription: (_, { id }) => {
+      const idx = store.prescriptions.findIndex(p => p.id === id);
+      if (idx === -1) return false;
+      store.prescriptions.splice(idx, 1);
+      return true;
     }
   },
 
   Patient: {
-    primaryDoctor: (parent) => store.users.find(u => u.id === parent.primaryDoctorId)
+    primaryDoctor: (parent) => store.users.find(u => u.id === parent.primaryDoctorId),
+    appointments: (parent) => store.appointments.filter(a => a.patientId === parent.id),
+    prescriptions: (parent) => store.prescriptions.filter(p => p.patientId === parent.id)
+  },
+
+  Appointment: {
+    patient: (parent) => store.patients.find(p => p.id === parent.patientId),
+    doctor: (parent) => store.users.find(u => u.id === parent.doctorId)
+  },
+
+  Prescription: {
+    patient: (parent) => store.patients.find(p => p.id === parent.patientId),
+    doctor: (parent) => store.users.find(u => u.id === parent.doctorId)
   }
 };
