@@ -24,6 +24,7 @@ module.exports = gql`
     primaryDoctor: User
     appointments: [Appointment]
     prescriptions: [Prescription]
+    medicalRecords: [MedicalRecord]
   }
 
   type Appointment {
@@ -46,6 +47,15 @@ module.exports = gql`
     date: String!
   }
 
+  type MedicalRecord {
+    id: ID!
+    patient: Patient!
+    type: RecordType!
+    data: String!
+    date: String!
+    confidential: Boolean!
+  }
+
   type AuthPayload {
     token: String!
     user: User!
@@ -64,6 +74,14 @@ module.exports = gql`
     COMPLETED
     CANCELLED
     NO_SHOW
+  }
+
+  enum RecordType {
+    LAB_RESULT
+    DIAGNOSIS
+    IMAGING
+    PROCEDURE
+    NOTE
   }
 
   input PatientInput {
@@ -97,6 +115,9 @@ module.exports = gql`
 
     prescriptions: [Prescription!]!
     prescription(id: ID!): Prescription
+
+    medicalRecords: [MedicalRecord!]!
+    medicalRecord(id: ID!): MedicalRecord
   }
 
   type Mutation {
@@ -113,5 +134,12 @@ module.exports = gql`
 
     createPrescription(patientId: ID!, medication: String!, dosage: String!, frequency: String!): Prescription
     deletePrescription(id: ID!): Boolean
+
+    createMedicalRecord(patientId: ID!, type: RecordType!, data: String!): MedicalRecord
+    updateMedicalRecord(id: ID!, data: String!): MedicalRecord
+    deleteMedicalRecord(id: ID!): Boolean
+
+    addComment(patientId: ID!, comment: String!): Patient
+    updateBio(userId: ID!, bio: String!): User
   }
 `;

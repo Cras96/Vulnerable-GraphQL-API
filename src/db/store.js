@@ -87,9 +87,16 @@ const prescriptions = [
   { id: '2', patientId: '3', doctorId: '2', medication: 'Lisinopril', dosage: '10mg', frequency: 'Once daily', date: '2024-01-05' }
 ];
 
+const medicalRecords = [
+  { id: '1', patientId: '1', type: 'LAB_RESULT', data: 'Blood glucose: 126 mg/dL', date: '2024-01-10', confidential: true },
+  { id: '2', patientId: '1', type: 'DIAGNOSIS', data: 'Type 2 Diabetes - well controlled', date: '2024-01-10', confidential: true },
+  { id: '3', patientId: '3', type: 'IMAGING', data: 'ECG shows normal sinus rhythm', date: '2024-01-12', confidential: true }
+];
+
 module.exports = {
   users,
   patients,
   appointments,
-  prescriptions
+  prescriptions,
+  medicalRecords
 };

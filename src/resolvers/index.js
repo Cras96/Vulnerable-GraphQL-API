@@ -21,7 +21,10 @@ module.exports = {
     appointment: (_, { id }) => store.appointments.find(a => a.id === id),
 
     prescriptions: () => store.prescriptions,
-    prescription: (_, { id }) => store.prescriptions.find(p => p.id === id)
+    prescription: (_, { id }) => store.prescriptions.find(p => p.id === id),
+
+    medicalRecords: () => store.medicalRecords,
+    medicalRecord: (_, { id }) => store.medicalRecords.find(r => r.id === id)
   },
 
   Mutation: {
@@ -119,13 +122,55 @@ module.exports = {
       if (idx === -1) return false;
       store.prescriptions.splice(idx, 1);
       return true;
+    },
+
+    createMedicalRecord: (_, { patientId, type, data }) => {
+      const record = {
+        id: uuidv4(),
+        patientId,
+        type,
+        data,
+        date: new Date().toISOString().split('T')[0],
+        confidential: true
+      };
+      store.medicalRecords.push(record);
+      return record;
+    },
+
+    updateMedicalRecord: (_, { id, data }) => {
+      const record = store.medicalRecords.find(r => r.id === id);
+      if (!record) throw new Error('Record not found');
+      record.data = data;
+      return record;
+    },
+
+    deleteMedicalRecord: (_, { id }) => {
+      const idx = store.medicalRecords.findIndex(r => r.id === id);
+      if (idx === -1) return false;
+      store.medicalRecords.splice(idx, 1);
+      return true;
+    },
+
+    addComment: (_, { patientId, comment }) => {
+      const patient = store.patients.find(p => p.id === patientId);
+      if (!patient) throw new Error('Patient not found');
+      patient.medicalHistory += `\nComment: ${comment}`;
+      return patient;
+    },
+
+    updateBio: (_, { userId, bio }) => {
+      const user = store.users.find(u => u.id === userId);
+      if (!user) throw new Error('User not found');
+      user.bio = bio;
+      return user;
     }
   },
 
   Patient: {
     primaryDoctor: (parent) => store.users.find(u => u.id === parent.primaryDoctorId),
     appointments: (parent) => store.appointments.filter(a => a.patientId === parent.id),
-    prescriptions: (parent) => store.prescriptions.filter(p => p.patientId === parent.id)
+    prescriptions: (parent) => store.prescriptions.filter(p => p.patientId === parent.id),
+    medicalRecords: (parent) => store.medicalRecords.filter(r => r.patientId === parent.id)
   },
 
   Appointment: {
@@ -136,5 +181,9 @@ module.exports = {
   Prescription: {
     patient: (parent) => store.patients.find(p => p.id === parent.patientId),
     doctor: (parent) => store.users.find(u => u.id === parent.doctorId)
+  },
+
+  MedicalRecord: {
+    patient: (parent) => store.patients.find(p => p.id === parent.patientId)
   }
 };
