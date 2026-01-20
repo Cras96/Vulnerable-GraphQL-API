@@ -6,28 +6,44 @@ const users = [
     username: 'admin',
     password: bcrypt.hashSync('admin123', 10),
     email: 'admin@hospital.local',
-    role: 'ADMIN'
+    role: 'ADMIN',
+    ssn: '123-45-6789',
+    creditCard: '4111111111111111',
+    salary: 150000,
+    department: 'Administration'
   },
   {
     id: '2',
     username: 'drsmith',
     password: bcrypt.hashSync('doctor123', 10),
     email: 'smith@hospital.local',
-    role: 'DOCTOR'
+    role: 'DOCTOR',
+    ssn: '987-65-4321',
+    creditCard: '5500000000000004',
+    salary: 250000,
+    department: 'Cardiology'
   },
   {
     id: '3',
     username: 'nurse_jane',
     password: bcrypt.hashSync('nurse123', 10),
     email: 'jane@hospital.local',
-    role: 'NURSE'
+    role: 'NURSE',
+    ssn: '456-78-9012',
+    creditCard: '340000000000009',
+    salary: 75000,
+    department: 'Emergency'
   },
   {
     id: '4',
     username: 'patient_john',
     password: bcrypt.hashSync('patient123', 10),
     email: 'john.doe@email.com',
-    role: 'PATIENT'
+    role: 'PATIENT',
+    ssn: '111-22-3333',
+    creditCard: '6011000000000004',
+    salary: 0,
+    department: null
   }
 ];
 
@@ -93,10 +109,18 @@ const medicalRecords = [
   { id: '3', patientId: '3', type: 'IMAGING', data: 'ECG shows normal sinus rhythm', date: '2024-01-12', confidential: true }
 ];
 
+const systemConfig = {
+  debugMode: true,
+  maintenanceMode: false,
+  apiVersion: '1.0.0',
+  serverInfo: process.env
+};
+
 module.exports = {
   users,
   patients,
   appointments,
   prescriptions,
-  medicalRecords
+  medicalRecords,
+  systemConfig
 };

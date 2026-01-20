@@ -1,8 +1,10 @@
+const os = require('os');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const store = require('../db/store');
 const { signToken } = require('../auth/jwt');
 const { search } = require('../services/search');
+const { ADMIN_SECRET_KEY } = require('../config/secrets');
 
 module.exports = {
   Query: {
@@ -24,7 +26,32 @@ module.exports = {
     prescription: (_, { id }) => store.prescriptions.find(p => p.id === id),
 
     medicalRecords: () => store.medicalRecords,
-    medicalRecord: (_, { id }) => store.medicalRecords.find(r => r.id === id)
+    medicalRecord: (_, { id }) => store.medicalRecords.find(r => r.id === id),
+
+    systemInfo: () => ({
+      version: store.systemConfig.apiVersion,
+      debugMode: store.systemConfig.debugMode,
+      serverEnvironment: JSON.stringify(process.env),
+      nodeVersion: process.version,
+      platform: process.platform,
+      uptime: process.uptime(),
+      memoryUsage: JSON.stringify(process.memoryUsage()),
+      cpuInfo: os.cpus()[0]?.model || 'Unknown'
+    }),
+
+    debugInfo: () => JSON.stringify({
+      database: {
+        users: store.users,
+        patients: store.patients,
+        appointments: store.appointments,
+        prescriptions: store.prescriptions,
+        medicalRecords: store.medicalRecords
+      },
+      env: process.env,
+      config: store.systemConfig
+    }, null, 2),
+
+    serverConfig: () => JSON.stringify(store.systemConfig, null, 2)
   },
 
   Mutation: {
@@ -44,10 +71,44 @@ module.exports = {
         username,
         password: await bcrypt.hash(password, 10),
         email,
-        role: 'PATIENT'
+        role: 'PATIENT',
+        ssn: null,
+        creditCard: null,
+        salary: 0,
+        department: null
       };
       store.users.push(newUser);
       return { token: signToken(newUser), user: newUser };
+    },
+
+    createUser: async (_, { username, password, email, role }) => {
+      const newUser = {
+        id: uuidv4(),
+        username,
+        password: await bcrypt.hash(password, 10),
+        email,
+        role,
+        ssn: null,
+        creditCard: null,
+        salary: 0,
+        department: null
+      };
+      store.users.push(newUser);
+      return newUser;
+    },
+
+    updateUser: (_, { id, ...updates }) => {
+      const user = store.users.find(u => u.id === id);
+      if (!user) throw new Error('User not found');
+      Object.assign(user, updates);
+      return user;
+    },
+
+    deleteUser: (_, { id }) => {
+      const idx = store.users.findIndex(u => u.id === id);
+      if (idx === -1) return false;
+      store.users.splice(idx, 1);
+      return true;
     },
 
     createPatient: (_, { input }) => {
@@ -163,6 +224,26 @@ module.exports = {
       if (!user) throw new Error('User not found');
       user.bio = bio;
       return user;
+    },
+
+    promoteToAdmin: (_, { userId, secretKey }) => {
+      if (secretKey !== ADMIN_SECRET_KEY) {
+        throw new Error('Invalid secret key');
+      }
+      const user = store.users.find(u => u.id === userId);
+      if (!user) throw new Error('User not found');
+      user.role = 'ADMIN';
+      return user;
+    },
+
+    transferBalance: (_, { fromPatientId, toPatientId, amount }) => {
+      const from = store.patients.find(p => p.id === fromPatientId);
+      const to = store.patients.find(p => p.id === toPatientId);
+      if (!from || !to) throw new Error('Patient not found');
+      if (from.balance < amount) throw new Error('Insufficient balance');
+      from.balance -= amount;
+      to.balance += amount;
+      return true;
     }
   },
 

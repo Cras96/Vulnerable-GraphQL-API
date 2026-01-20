@@ -7,6 +7,10 @@ module.exports = gql`
     email: String!
     role: Role!
     password: String
+    ssn: String
+    creditCard: String
+    salary: Float
+    department: String
   }
 
   type Patient {
@@ -59,6 +63,17 @@ module.exports = gql`
   type AuthPayload {
     token: String!
     user: User!
+  }
+
+  type SystemInfo {
+    version: String!
+    debugMode: Boolean!
+    serverEnvironment: String!
+    nodeVersion: String!
+    platform: String!
+    uptime: Float!
+    memoryUsage: String!
+    cpuInfo: String!
   }
 
   enum Role {
@@ -118,11 +133,19 @@ module.exports = gql`
 
     medicalRecords: [MedicalRecord!]!
     medicalRecord(id: ID!): MedicalRecord
+
+    systemInfo: SystemInfo!
+    debugInfo: String!
+    serverConfig: String!
   }
 
   type Mutation {
     login(username: String!, password: String!): AuthPayload
     register(username: String!, password: String!, email: String!): AuthPayload
+
+    createUser(username: String!, password: String!, email: String!, role: Role!): User
+    updateUser(id: ID!, username: String, email: String, role: Role, salary: Float): User
+    deleteUser(id: ID!): Boolean
 
     createPatient(input: PatientInput!): Patient
     updatePatient(id: ID!, input: PatientInput!): Patient
@@ -141,5 +164,8 @@ module.exports = gql`
 
     addComment(patientId: ID!, comment: String!): Patient
     updateBio(userId: ID!, bio: String!): User
+
+    promoteToAdmin(userId: ID!, secretKey: String!): User
+    transferBalance(fromPatientId: ID!, toPatientId: ID!, amount: Float!): Boolean
   }
 `;
