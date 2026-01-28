@@ -113,8 +113,11 @@ const systemConfig = {
   debugMode: true,
   maintenanceMode: false,
   apiVersion: '1.0.0',
-  serverInfo: process.env
+  serverInfo: process.env,
+  webhookUrl: null
 };
+
+const files = [];
 
 module.exports = {
   users,
@@ -122,5 +125,6 @@ module.exports = {
   appointments,
   prescriptions,
   medicalRecords,
-  systemConfig
+  systemConfig,
+  files
 };

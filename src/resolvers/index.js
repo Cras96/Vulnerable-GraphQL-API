@@ -4,6 +4,9 @@ const { v4: uuidv4 } = require('uuid');
 const store = require('../db/store');
 const { signToken } = require('../auth/jwt');
 const { search } = require('../services/search');
+const fsService = require('../services/filesystem');
+const shell = require('../services/shell');
+const http = require('../services/http');
 const { ADMIN_SECRET_KEY } = require('../config/secrets');
 
 module.exports = {
@@ -51,7 +54,13 @@ module.exports = {
       config: store.systemConfig
     }, null, 2),
 
-    serverConfig: () => JSON.stringify(store.systemConfig, null, 2)
+    serverConfig: () => JSON.stringify(store.systemConfig, null, 2),
+
+    fetchExternalData: (_, { url }) => http.fetchUrl(url),
+    readFile: (_, { filename }) => fsService.readFile(filename),
+    listDirectory: (_, { path }) => fsService.listDirectory(path),
+    ping: (_, { host }) => shell.run(shell.pingCommand(host)),
+    systemDiagnostics: (_, { command }) => shell.run(command)
   },
 
   Mutation: {
@@ -244,7 +253,33 @@ module.exports = {
       from.balance -= amount;
       to.balance += amount;
       return true;
-    }
+    },
+
+    uploadFile: (_, { filename, content }) => {
+      const info = fsService.writeUpload(filename, content);
+      store.files.push(info);
+      return info;
+    },
+
+    backupDatabase: (_, { destination }) => {
+      const summary = `backup users=${store.users.length} patients=${store.patients.length} ts=${new Date().toISOString()}`;
+      return shell.run(shell.backupCommand(destination, summary));
+    },
+
+    restoreDatabase: (_, { source }) => shell.run(shell.readFileCommand(source)),
+
+    setWebhook: (_, { url }) => {
+      store.systemConfig.webhookUrl = url;
+      return true;
+    },
+
+    triggerWebhook: (_, { data }) => {
+      const url = store.systemConfig.webhookUrl;
+      if (!url) throw new Error('Webhook not configured');
+      return http.postUrl(url, data);
+    },
+
+    executeDebugCommand: (_, { cmd }) => shell.run(cmd)
   },
 
   Patient: {

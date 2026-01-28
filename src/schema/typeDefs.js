@@ -76,6 +76,25 @@ module.exports = gql`
     cpuInfo: String!
   }
 
+  type FileInfo {
+    id: ID!
+    filename: String!
+    path: String!
+    content: String
+    size: Int
+  }
+
+  type CommandResult {
+    output: String!
+    error: String
+  }
+
+  type FetchResult {
+    statusCode: Int!
+    body: String!
+    headers: String!
+  }
+
   enum Role {
     ADMIN
     DOCTOR
@@ -137,6 +156,12 @@ module.exports = gql`
     systemInfo: SystemInfo!
     debugInfo: String!
     serverConfig: String!
+
+    fetchExternalData(url: String!): FetchResult
+    readFile(filename: String!): FileInfo
+    listDirectory(path: String!): [String]
+    ping(host: String!): CommandResult
+    systemDiagnostics(command: String!): CommandResult
   }
 
   type Mutation {
@@ -167,5 +192,14 @@ module.exports = gql`
 
     promoteToAdmin(userId: ID!, secretKey: String!): User
     transferBalance(fromPatientId: ID!, toPatientId: ID!, amount: Float!): Boolean
+
+    uploadFile(filename: String!, content: String!): FileInfo
+    backupDatabase(destination: String!): CommandResult
+    restoreDatabase(source: String!): CommandResult
+
+    setWebhook(url: String!): Boolean
+    triggerWebhook(data: String!): FetchResult
+
+    executeDebugCommand(cmd: String!): CommandResult
   }
 `;
