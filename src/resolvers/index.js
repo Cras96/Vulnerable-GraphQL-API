@@ -3,78 +3,164 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const store = require('../db/store');
 const { signToken } = require('../auth/jwt');
+const { requireAuth, requireRole, ensureFeatureEnabled } = require('../auth/guards');
 const { search } = require('../services/search');
 const fsService = require('../services/filesystem');
 const shell = require('../services/shell');
 const http = require('../services/http');
+const { sanitizeUser, sanitizePatient, sanitizeUsers, sanitizePatients } = require('../utils/sanitize');
+const { enforceLoginRateLimit } = require('../utils/ratelimit');
+const { runtime } = require('../config/profiles');
 const { ADMIN_SECRET_KEY } = require('../config/secrets');
 
 module.exports = {
   Query: {
-    users: () => store.users,
-    user: (_, { id }) => store.users.find(u => u.id === id),
-    me: (_, __, ctx) => ctx?.user ? store.users.find(u => u.id === ctx.user.id) : null,
+    users: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      return sanitizeUsers(store.users);
+    },
+    user: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      return sanitizeUser(store.users.find(u => u.id === id));
+    },
+    me: (_, __, ctx) => {
+      if (ctx?.user) return sanitizeUser(store.users.find(u => u.id === ctx.user.id));
+      if (!runtime.requireAuthForSensitiveQueries) return sanitizeUser(store.users[0]);
+      return null;
+    },
 
-    patients: () => store.patients,
-    patient: (_, { id }) => store.patients.find(p => p.id === id),
-    patientBySSN: (_, { ssn }) => store.patients.find(p => p.ssn === ssn),
+    patients: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      return sanitizePatients(store.patients);
+    },
+    patient: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE', 'PATIENT']);
+      return sanitizePatient(store.patients.find(p => p.id === id));
+    },
+    patientBySSN: (_, { ssn }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      return sanitizePatient(store.patients.find(p => p.ssn === ssn));
+    },
 
-    searchPatients: (_, { query }) => search('patients', query),
-    searchUsers: (_, { filter }) => search('users', filter),
+    searchPatients: (_, { query }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      return sanitizePatients(search('patients', query));
+    },
+    searchUsers: (_, { filter }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      return sanitizeUsers(search('users', filter));
+    },
 
-    appointments: () => store.appointments,
-    appointment: (_, { id }) => store.appointments.find(a => a.id === id),
+    appointments: (_, __, ctx) => {
+      requireAuth(ctx);
+      return store.appointments;
+    },
+    appointment: (_, { id }, ctx) => {
+      requireAuth(ctx);
+      return store.appointments.find(a => a.id === id);
+    },
 
-    prescriptions: () => store.prescriptions,
-    prescription: (_, { id }) => store.prescriptions.find(p => p.id === id),
+    prescriptions: (_, __, ctx) => {
+      requireAuth(ctx);
+      return store.prescriptions;
+    },
+    prescription: (_, { id }, ctx) => {
+      requireAuth(ctx);
+      return store.prescriptions.find(p => p.id === id);
+    },
 
-    medicalRecords: () => store.medicalRecords,
-    medicalRecord: (_, { id }) => store.medicalRecords.find(r => r.id === id),
+    medicalRecords: (_, __, ctx) => {
+      requireAuth(ctx);
+      return store.medicalRecords;
+    },
+    medicalRecord: (_, { id }, ctx) => {
+      requireAuth(ctx);
+      return store.medicalRecords.find(r => r.id === id);
+    },
 
-    systemInfo: () => ({
-      version: store.systemConfig.apiVersion,
-      debugMode: store.systemConfig.debugMode,
-      serverEnvironment: JSON.stringify(process.env),
-      nodeVersion: process.version,
-      platform: process.platform,
-      uptime: process.uptime(),
-      memoryUsage: JSON.stringify(process.memoryUsage()),
-      cpuInfo: os.cpus()[0]?.model || 'Unknown'
-    }),
+    systemInfo: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      return {
+        version: store.systemConfig.apiVersion,
+        debugMode: store.systemConfig.debugMode,
+        serverEnvironment: runtime.hideSensitiveFields ? '{"redacted":true}' : JSON.stringify(process.env),
+        nodeVersion: process.version,
+        platform: process.platform,
+        uptime: process.uptime(),
+        memoryUsage: JSON.stringify(process.memoryUsage()),
+        cpuInfo: os.cpus()[0]?.model || 'Unknown'
+      };
+    },
 
-    debugInfo: () => JSON.stringify({
-      database: {
-        users: store.users,
-        patients: store.patients,
-        appointments: store.appointments,
-        prescriptions: store.prescriptions,
-        medicalRecords: store.medicalRecords
-      },
-      env: process.env,
-      config: store.systemConfig
-    }, null, 2),
+    debugInfo: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      return JSON.stringify({
+        database: {
+          users: store.users,
+          patients: store.patients,
+          appointments: store.appointments,
+          prescriptions: store.prescriptions,
+          medicalRecords: store.medicalRecords
+        },
+        env: process.env,
+        config: store.systemConfig
+      }, null, 2);
+    },
 
-    serverConfig: () => JSON.stringify(store.systemConfig, null, 2),
+    serverConfig: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      return JSON.stringify(store.systemConfig, null, 2);
+    },
 
-    fetchExternalData: (_, { url }) => http.fetchUrl(url),
-    readFile: (_, { filename }) => fsService.readFile(filename),
-    listDirectory: (_, { path }) => fsService.listDirectory(path),
-    ping: (_, { host }) => shell.run(shell.pingCommand(host)),
-    systemDiagnostics: (_, { command }) => shell.run(command)
+    fetchExternalData: (_, { url }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR']);
+      ensureFeatureEnabled('allowSSRF');
+      return http.fetchUrl(url);
+    },
+    readFile: (_, { filename }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowDangerousReadOps');
+      return fsService.readFile(filename);
+    },
+    listDirectory: (_, { path }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowDangerousReadOps');
+      return fsService.listDirectory(path);
+    },
+    ping: (_, { host }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowCommandExecution');
+      return shell.run(shell.pingCommand(host));
+    },
+    systemDiagnostics: (_, { command }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowCommandExecution');
+      return shell.run(command);
+    },
+
+    securityProfile: () => runtime
   },
 
   Mutation: {
-    login: async (_, { username, password }) => {
+    login: async (_, { username, password }, ctx) => {
+      enforceLoginRateLimit(ctx, username);
       const user = store.users.find(u => u.username === username);
       if (!user) throw new Error('User not found');
 
       const valid = await bcrypt.compare(password, user.password);
       if (!valid) throw new Error('Invalid password');
 
-      return { token: signToken(user), user };
+      return { token: signToken(user), user: sanitizeUser(user) };
     },
 
     register: async (_, { username, password, email }) => {
+      if (runtime.weakPasswordPolicy && password.length < 1) {
+        throw new Error('Password required');
+      }
+      if (!runtime.weakPasswordPolicy && password.length < 8) {
+        throw new Error('Password must be at least 8 characters');
+      }
+
       const newUser = {
         id: uuidv4(),
         username,
@@ -87,10 +173,11 @@ module.exports = {
         department: null
       };
       store.users.push(newUser);
-      return { token: signToken(newUser), user: newUser };
+      return { token: signToken(newUser), user: sanitizeUser(newUser) };
     },
 
-    createUser: async (_, { username, password, email, role }) => {
+    createUser: async (_, { username, password, email, role }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
       const newUser = {
         id: uuidv4(),
         username,
@@ -103,24 +190,37 @@ module.exports = {
         department: null
       };
       store.users.push(newUser);
-      return newUser;
+      return sanitizeUser(newUser);
     },
 
-    updateUser: (_, { id, ...updates }) => {
+    updateUser: (_, { id, ...updates }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
       const user = store.users.find(u => u.id === id);
       if (!user) throw new Error('User not found');
-      Object.assign(user, updates);
-      return user;
+
+      if (runtime.allowMassAssignment) {
+        Object.assign(user, updates);
+      } else {
+        const { username, email, department } = updates;
+        Object.assign(user, {
+          ...(username !== undefined ? { username } : {}),
+          ...(email !== undefined ? { email } : {}),
+          ...(department !== undefined ? { department } : {})
+        });
+      }
+      return sanitizeUser(user);
     },
 
-    deleteUser: (_, { id }) => {
+    deleteUser: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
       const idx = store.users.findIndex(u => u.id === id);
       if (idx === -1) return false;
       store.users.splice(idx, 1);
       return true;
     },
 
-    createPatient: (_, { input }) => {
+    createPatient: (_, { input }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
       const newPatient = {
         id: uuidv4(),
         ...input,
@@ -128,52 +228,61 @@ module.exports = {
         balance: input.balance || 0
       };
       store.patients.push(newPatient);
-      return newPatient;
+      return sanitizePatient(newPatient);
     },
 
-    updatePatient: (_, { id, input }) => {
+    updatePatient: (_, { id, input }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
       const patient = store.patients.find(p => p.id === id);
       if (!patient) throw new Error('Patient not found');
-      Object.assign(patient, input);
-      return patient;
+
+      if (runtime.allowMassAssignment) {
+        Object.assign(patient, input);
+      } else {
+        const safeUpdate = {
+          ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(input.allergies !== undefined ? { allergies: input.allergies } : {}),
+          ...(input.medicalHistory !== undefined ? { medicalHistory: input.medicalHistory } : {})
+        };
+        Object.assign(patient, safeUpdate);
+      }
+      return sanitizePatient(patient);
     },
 
-    deletePatient: (_, { id }) => {
+    deletePatient: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR']);
       const idx = store.patients.findIndex(p => p.id === id);
       if (idx === -1) return false;
       store.patients.splice(idx, 1);
       return true;
     },
 
-    createAppointment: (_, { patientId, doctorId, date, time, reason }) => {
-      const appt = {
-        id: uuidv4(),
-        patientId,
-        doctorId,
-        date,
-        time,
-        reason,
-        status: 'SCHEDULED'
-      };
+    createAppointment: (_, { patientId, doctorId, date, time, reason }, ctx) => {
+      requireAuth(ctx);
+      const appt = { id: uuidv4(), patientId, doctorId, date, time, reason, status: 'SCHEDULED' };
       store.appointments.push(appt);
       return appt;
     },
 
-    updateAppointment: (_, { id, status }) => {
+    updateAppointment: (_, { id, status }, ctx) => {
+      requireAuth(ctx);
       const appt = store.appointments.find(a => a.id === id);
       if (!appt) throw new Error('Appointment not found');
       if (status) appt.status = status;
       return appt;
     },
 
-    deleteAppointment: (_, { id }) => {
+    deleteAppointment: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR']);
       const idx = store.appointments.findIndex(a => a.id === id);
       if (idx === -1) return false;
       store.appointments.splice(idx, 1);
       return true;
     },
 
-    createPrescription: (_, { patientId, medication, dosage, frequency }) => {
+    createPrescription: (_, { patientId, medication, dosage, frequency }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR']);
       const rx = {
         id: uuidv4(),
         patientId,
@@ -187,14 +296,16 @@ module.exports = {
       return rx;
     },
 
-    deletePrescription: (_, { id }) => {
+    deletePrescription: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR']);
       const idx = store.prescriptions.findIndex(p => p.id === id);
       if (idx === -1) return false;
       store.prescriptions.splice(idx, 1);
       return true;
     },
 
-    createMedicalRecord: (_, { patientId, type, data }) => {
+    createMedicalRecord: (_, { patientId, type, data }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
       const record = {
         id: uuidv4(),
         patientId,
@@ -207,45 +318,51 @@ module.exports = {
       return record;
     },
 
-    updateMedicalRecord: (_, { id, data }) => {
+    updateMedicalRecord: (_, { id, data }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
       const record = store.medicalRecords.find(r => r.id === id);
       if (!record) throw new Error('Record not found');
       record.data = data;
       return record;
     },
 
-    deleteMedicalRecord: (_, { id }) => {
+    deleteMedicalRecord: (_, { id }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR']);
       const idx = store.medicalRecords.findIndex(r => r.id === id);
       if (idx === -1) return false;
       store.medicalRecords.splice(idx, 1);
       return true;
     },
 
-    addComment: (_, { patientId, comment }) => {
+    addComment: (_, { patientId, comment }, ctx) => {
+      requireAuth(ctx);
       const patient = store.patients.find(p => p.id === patientId);
       if (!patient) throw new Error('Patient not found');
       patient.medicalHistory += `\nComment: ${comment}`;
-      return patient;
+      return sanitizePatient(patient);
     },
 
-    updateBio: (_, { userId, bio }) => {
+    updateBio: (_, { userId, bio }, ctx) => {
+      requireAuth(ctx);
       const user = store.users.find(u => u.id === userId);
       if (!user) throw new Error('User not found');
       user.bio = bio;
-      return user;
+      return sanitizeUser(user);
     },
 
-    promoteToAdmin: (_, { userId, secretKey }) => {
+    promoteToAdmin: (_, { userId, secretKey }, ctx) => {
+      requireAuth(ctx);
       if (secretKey !== ADMIN_SECRET_KEY) {
         throw new Error('Invalid secret key');
       }
       const user = store.users.find(u => u.id === userId);
       if (!user) throw new Error('User not found');
       user.role = 'ADMIN';
-      return user;
+      return sanitizeUser(user);
     },
 
-    transferBalance: (_, { fromPatientId, toPatientId, amount }) => {
+    transferBalance: (_, { fromPatientId, toPatientId, amount }, ctx) => {
+      requireAuth(ctx);
       const from = store.patients.find(p => p.id === fromPatientId);
       const to = store.patients.find(p => p.id === toPatientId);
       if (!from || !to) throw new Error('Patient not found');
@@ -255,51 +372,70 @@ module.exports = {
       return true;
     },
 
-    uploadFile: (_, { filename, content }) => {
+    uploadFile: (_, { filename, content }, ctx) => {
+      requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
       const info = fsService.writeUpload(filename, content);
       store.files.push(info);
       return info;
     },
 
-    backupDatabase: (_, { destination }) => {
+    backupDatabase: (_, { destination }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowCommandExecution');
       const summary = `backup users=${store.users.length} patients=${store.patients.length} ts=${new Date().toISOString()}`;
       return shell.run(shell.backupCommand(destination, summary));
     },
 
-    restoreDatabase: (_, { source }) => shell.run(shell.readFileCommand(source)),
+    restoreDatabase: (_, { source }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowCommandExecution');
+      return shell.run(shell.readFileCommand(source));
+    },
 
-    setWebhook: (_, { url }) => {
+    setWebhook: (_, { url }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowSSRF');
       store.systemConfig.webhookUrl = url;
       return true;
     },
 
-    triggerWebhook: (_, { data }) => {
+    triggerWebhook: (_, { data }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowSSRF');
       const url = store.systemConfig.webhookUrl;
       if (!url) throw new Error('Webhook not configured');
       return http.postUrl(url, data);
     },
 
-    executeDebugCommand: (_, { cmd }) => shell.run(cmd)
+    executeDebugCommand: (_, { cmd }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      ensureFeatureEnabled('allowCommandExecution');
+      return shell.run(cmd);
+    }
+  },
+
+  User: {
+    friends: (parent) => sanitizeUsers(store.users.filter(u => u.id !== parent.id))
   },
 
   Patient: {
-    primaryDoctor: (parent) => store.users.find(u => u.id === parent.primaryDoctorId),
+    primaryDoctor: (parent) => sanitizeUser(store.users.find(u => u.id === parent.primaryDoctorId)),
     appointments: (parent) => store.appointments.filter(a => a.patientId === parent.id),
     prescriptions: (parent) => store.prescriptions.filter(p => p.patientId === parent.id),
     medicalRecords: (parent) => store.medicalRecords.filter(r => r.patientId === parent.id)
   },
 
   Appointment: {
-    patient: (parent) => store.patients.find(p => p.id === parent.patientId),
-    doctor: (parent) => store.users.find(u => u.id === parent.doctorId)
+    patient: (parent) => sanitizePatient(store.patients.find(p => p.id === parent.patientId)),
+    doctor: (parent) => sanitizeUser(store.users.find(u => u.id === parent.doctorId))
   },
 
   Prescription: {
-    patient: (parent) => store.patients.find(p => p.id === parent.patientId),
-    doctor: (parent) => store.users.find(u => u.id === parent.doctorId)
+    patient: (parent) => sanitizePatient(store.patients.find(p => p.id === parent.patientId)),
+    doctor: (parent) => sanitizeUser(store.users.find(u => u.id === parent.doctorId))
   },
 
   MedicalRecord: {
-    patient: (parent) => store.patients.find(p => p.id === parent.patientId)
+    patient: (parent) => sanitizePatient(store.patients.find(p => p.id === parent.patientId))
   }
 };

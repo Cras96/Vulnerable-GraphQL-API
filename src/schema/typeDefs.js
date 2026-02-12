@@ -11,6 +11,7 @@ module.exports = gql`
     creditCard: String
     salary: Float
     department: String
+    friends: [User]
   }
 
   type Patient {
@@ -95,6 +96,25 @@ module.exports = gql`
     headers: String!
   }
 
+  type SecurityProfile {
+    mode: String!
+    description: String!
+    introspectionEnabled: Boolean!
+    playgroundEnabled: Boolean!
+    debugEnabled: Boolean!
+    requireAuthForSensitiveQueries: Boolean!
+    enforceRoleChecks: Boolean!
+    allowDangerousReadOps: Boolean!
+    allowCommandExecution: Boolean!
+    allowSSRF: Boolean!
+    allowMassAssignment: Boolean!
+    weakPasswordPolicy: Boolean!
+    rateLimitLogin: Boolean!
+    tokenExpiresIn: String
+    strictTokenValidation: Boolean!
+    hideSensitiveFields: Boolean!
+  }
+
   enum Role {
     ADMIN
     DOCTOR
@@ -162,6 +182,8 @@ module.exports = gql`
     listDirectory(path: String!): [String]
     ping(host: String!): CommandResult
     systemDiagnostics(command: String!): CommandResult
+
+    securityProfile: SecurityProfile!
   }
 
   type Mutation {
