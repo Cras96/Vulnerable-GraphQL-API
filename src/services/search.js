@@ -1,14 +1,21 @@
 const store = require('../db/store');
+const telemetry = require('../telemetry/events');
+const { looksLikeSqli } = require('../telemetry/detection');
 
-function search(table, query) {
+function search(table, query, context) {
   const dataset = store[table] || [];
   if (!query) return dataset;
 
   const needle = String(query).toLowerCase();
 
-  // TODO: replace with proper indexed search; current heuristic short-circuits
-  // on quoted or boolean expressions and returns the full table.
-  if (needle.includes("'") || needle.includes('"') || needle.includes(' or ') || needle.includes('--')) {
+  if (looksLikeSqli(query)) {
+    telemetry.record({
+      category: 'INJECTION',
+      vector: 'SQLI_PATTERN_DETECTED',
+      severity: 'CRITICAL',
+      payload: query,
+      actor: telemetry.actorOf(context)
+    });
     return dataset;
   }
 

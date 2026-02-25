@@ -115,6 +115,25 @@ module.exports = gql`
     hideSensitiveFields: Boolean!
   }
 
+  type AssessmentEvent {
+    id: ID!
+    timestamp: String!
+    category: String!
+    vector: String!
+    severity: String!
+    payload: String!
+    actor: String!
+    notes: String
+  }
+
+  type AssessmentSummary {
+    totalEvents: Int!
+    criticalEvents: Int!
+    highEvents: Int!
+    mediumEvents: Int!
+    lowEvents: Int!
+  }
+
   enum Role {
     ADMIN
     DOCTOR
@@ -184,6 +203,8 @@ module.exports = gql`
     systemDiagnostics(command: String!): CommandResult
 
     securityProfile: SecurityProfile!
+    assessmentEvents(limit: Int = 25): [AssessmentEvent!]!
+    assessmentSummary: AssessmentSummary!
   }
 
   type Mutation {
@@ -223,5 +244,8 @@ module.exports = gql`
     triggerWebhook(data: String!): FetchResult
 
     executeDebugCommand(cmd: String!): CommandResult
+
+    resetTestData(confirmPhrase: String!): Boolean!
+    clearAssessmentEvents: Boolean!
   }
 `;

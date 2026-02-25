@@ -9,9 +9,23 @@ const fsService = require('../services/filesystem');
 const shell = require('../services/shell');
 const http = require('../services/http');
 const { sanitizeUser, sanitizePatient, sanitizeUsers, sanitizePatients } = require('../utils/sanitize');
-const { enforceLoginRateLimit } = require('../utils/ratelimit');
+const { enforceLoginRateLimit, resetLoginAttempts } = require('../utils/ratelimit');
 const { runtime } = require('../config/profiles');
 const { ADMIN_SECRET_KEY } = require('../config/secrets');
+const telemetry = require('../telemetry/events');
+const detection = require('../telemetry/detection');
+
+function emitXssIfDetected(value, context) {
+  if (typeof value === 'string' && detection.looksLikeXss(value)) {
+    telemetry.record({
+      category: 'INJECTION',
+      vector: 'STORED_XSS_PAYLOAD',
+      severity: 'HIGH',
+      payload: value,
+      actor: telemetry.actorOf(context)
+    });
+  }
+}
 
 module.exports = {
   Query: {
@@ -44,11 +58,11 @@ module.exports = {
 
     searchPatients: (_, { query }, ctx) => {
       requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
-      return sanitizePatients(search('patients', query));
+      return sanitizePatients(search('patients', query, ctx));
     },
     searchUsers: (_, { filter }, ctx) => {
       requireRole(ctx, ['ADMIN']);
-      return sanitizeUsers(search('users', filter));
+      return sanitizeUsers(search('users', filter, ctx));
     },
 
     appointments: (_, __, ctx) => {
@@ -80,6 +94,13 @@ module.exports = {
 
     systemInfo: (_, __, ctx) => {
       requireRole(ctx, ['ADMIN']);
+      telemetry.record({
+        category: 'INFO_DISCLOSURE',
+        vector: 'SYSTEM_INFO_DISCLOSURE',
+        severity: 'MEDIUM',
+        payload: 'systemInfo',
+        actor: telemetry.actorOf(ctx)
+      });
       return {
         version: store.systemConfig.apiVersion,
         debugMode: store.systemConfig.debugMode,
@@ -94,6 +115,13 @@ module.exports = {
 
     debugInfo: (_, __, ctx) => {
       requireRole(ctx, ['ADMIN']);
+      telemetry.record({
+        category: 'INFO_DISCLOSURE',
+        vector: 'DEBUG_INFO_DISCLOSURE',
+        severity: 'HIGH',
+        payload: 'debugInfo',
+        actor: telemetry.actorOf(ctx)
+      });
       return JSON.stringify({
         database: {
           users: store.users,
@@ -109,46 +137,126 @@ module.exports = {
 
     serverConfig: (_, __, ctx) => {
       requireRole(ctx, ['ADMIN']);
+      telemetry.record({
+        category: 'INFO_DISCLOSURE',
+        vector: 'SERVER_CONFIG_DISCLOSURE',
+        severity: 'HIGH',
+        payload: 'serverConfig',
+        actor: telemetry.actorOf(ctx)
+      });
       return JSON.stringify(store.systemConfig, null, 2);
     },
 
     fetchExternalData: (_, { url }, ctx) => {
       requireRole(ctx, ['ADMIN', 'DOCTOR']);
       ensureFeatureEnabled('allowSSRF');
+      if (detection.looksLikeInternalUrl(url)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'SSRF_INTERNAL_TARGET',
+          severity: 'CRITICAL',
+          payload: url,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       return http.fetchUrl(url);
     },
     readFile: (_, { filename }, ctx) => {
       requireRole(ctx, ['ADMIN']);
       ensureFeatureEnabled('allowDangerousReadOps');
+      if (detection.looksLikePathTraversal(filename)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'PATH_TRAVERSAL_PATTERN',
+          severity: 'CRITICAL',
+          payload: filename,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       return fsService.readFile(filename);
     },
     listDirectory: (_, { path }, ctx) => {
       requireRole(ctx, ['ADMIN']);
       ensureFeatureEnabled('allowDangerousReadOps');
+      if (detection.looksLikePathTraversal(path)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'DIRECTORY_TRAVERSAL_PATTERN',
+          severity: 'HIGH',
+          payload: path,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       return fsService.listDirectory(path);
     },
     ping: (_, { host }, ctx) => {
       requireRole(ctx, ['ADMIN']);
       ensureFeatureEnabled('allowCommandExecution');
+      if (detection.looksLikeCommandInjection(host)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'COMMAND_INJECTION_PATTERN',
+          severity: 'CRITICAL',
+          payload: host,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       return shell.run(shell.pingCommand(host));
     },
     systemDiagnostics: (_, { command }, ctx) => {
       requireRole(ctx, ['ADMIN']);
       ensureFeatureEnabled('allowCommandExecution');
+      if (detection.looksLikeCommandInjection(command)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'COMMAND_INJECTION_PATTERN',
+          severity: 'CRITICAL',
+          payload: command,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       return shell.run(command);
     },
 
-    securityProfile: () => runtime
+    securityProfile: () => runtime,
+
+    assessmentEvents: (_, { limit }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      return telemetry.list(limit);
+    },
+
+    assessmentSummary: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      return telemetry.summary();
+    }
   },
 
   Mutation: {
     login: async (_, { username, password }, ctx) => {
       enforceLoginRateLimit(ctx, username);
       const user = store.users.find(u => u.username === username);
-      if (!user) throw new Error('User not found');
+      if (!user) {
+        telemetry.record({
+          category: 'AUTH',
+          vector: 'USERNAME_ENUMERATION',
+          severity: 'MEDIUM',
+          payload: username,
+          actor: username
+        });
+        throw new Error('User not found');
+      }
 
       const valid = await bcrypt.compare(password, user.password);
-      if (!valid) throw new Error('Invalid password');
+      if (!valid) {
+        telemetry.record({
+          category: 'AUTH',
+          vector: 'FAILED_LOGIN',
+          severity: 'LOW',
+          payload: username,
+          actor: username
+        });
+        throw new Error('Invalid password');
+      }
 
       return { token: signToken(user), user: sanitizeUser(user) };
     },
@@ -306,6 +414,7 @@ module.exports = {
 
     createMedicalRecord: (_, { patientId, type, data }, ctx) => {
       requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      emitXssIfDetected(data, ctx);
       const record = {
         id: uuidv4(),
         patientId,
@@ -320,6 +429,7 @@ module.exports = {
 
     updateMedicalRecord: (_, { id, data }, ctx) => {
       requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      emitXssIfDetected(data, ctx);
       const record = store.medicalRecords.find(r => r.id === id);
       if (!record) throw new Error('Record not found');
       record.data = data;
@@ -336,6 +446,7 @@ module.exports = {
 
     addComment: (_, { patientId, comment }, ctx) => {
       requireAuth(ctx);
+      emitXssIfDetected(comment, ctx);
       const patient = store.patients.find(p => p.id === patientId);
       if (!patient) throw new Error('Patient not found');
       patient.medicalHistory += `\nComment: ${comment}`;
@@ -344,6 +455,7 @@ module.exports = {
 
     updateBio: (_, { userId, bio }, ctx) => {
       requireAuth(ctx);
+      emitXssIfDetected(bio, ctx);
       const user = store.users.find(u => u.id === userId);
       if (!user) throw new Error('User not found');
       user.bio = bio;
@@ -355,6 +467,13 @@ module.exports = {
       if (secretKey !== ADMIN_SECRET_KEY) {
         throw new Error('Invalid secret key');
       }
+      telemetry.record({
+        category: 'ACCESS_CONTROL',
+        vector: 'PRIVILEGE_ESCALATION_SUCCESS',
+        severity: 'CRITICAL',
+        payload: `userId=${userId}`,
+        actor: telemetry.actorOf(ctx)
+      });
       const user = store.users.find(u => u.id === userId);
       if (!user) throw new Error('User not found');
       user.role = 'ADMIN';
@@ -374,6 +493,15 @@ module.exports = {
 
     uploadFile: (_, { filename, content }, ctx) => {
       requireRole(ctx, ['ADMIN', 'DOCTOR', 'NURSE']);
+      if (detection.looksLikePathTraversal(filename)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'ARBITRARY_FILE_UPLOAD_PATH_TRAVERSAL',
+          severity: 'CRITICAL',
+          payload: filename,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       const info = fsService.writeUpload(filename, content);
       store.files.push(info);
       return info;
@@ -395,6 +523,15 @@ module.exports = {
     setWebhook: (_, { url }, ctx) => {
       requireRole(ctx, ['ADMIN']);
       ensureFeatureEnabled('allowSSRF');
+      if (detection.looksLikeInternalUrl(url)) {
+        telemetry.record({
+          category: 'INJECTION',
+          vector: 'SSRF_INTERNAL_WEBHOOK',
+          severity: 'CRITICAL',
+          payload: url,
+          actor: telemetry.actorOf(ctx)
+        });
+      }
       store.systemConfig.webhookUrl = url;
       return true;
     },
@@ -411,6 +548,23 @@ module.exports = {
       requireRole(ctx, ['ADMIN']);
       ensureFeatureEnabled('allowCommandExecution');
       return shell.run(cmd);
+    },
+
+    resetTestData: (_, { confirmPhrase }, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      if (confirmPhrase !== store.TEST_RESET_PHRASE) {
+        throw new Error(`Invalid confirmation phrase. Use: ${store.TEST_RESET_PHRASE}`);
+      }
+      store.reset();
+      telemetry.clear();
+      resetLoginAttempts();
+      return true;
+    },
+
+    clearAssessmentEvents: (_, __, ctx) => {
+      requireRole(ctx, ['ADMIN']);
+      telemetry.clear();
+      return true;
     }
   },
 
