@@ -1,11 +1,12 @@
 {
   "name": "vulnerable-graphql-api",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Healthcare GraphQL API used as a security testbed.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "lab": "cross-env TEST_MODE=LAB_FULLY_VULNERABLE node src/server.js"
   },
   "engines": {
     "node": ">=18"
@@ -21,6 +22,7 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "nodemon": "^3.0.2"
   }
 }
