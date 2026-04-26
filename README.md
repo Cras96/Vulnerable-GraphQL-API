@@ -97,7 +97,26 @@ mutation {
 - [`VULNERABILITIES.md`](VULNERABILITIES.md) - inventory of intentional weaknesses, grouped by category.
 - [`PAYLOADS.graphql`](PAYLOADS.graphql) - example queries and mutations that exercise each weakness.
 
-## Disclaimer
+## Disclaimer and safe-use boundaries
 
-This repository exists for academic research and security education. Running it on
-any host that is reachable from a public network is not supported.
+This repository exists exclusively for academic research and security education.
+It is an intentionally vulnerable GraphQL API and must be executed only on
+`localhost`, `127.0.0.1`, or an isolated private lab environment controlled by
+the user.
+
+Do not deploy this application as a public internet-facing service. Do not run
+the included payloads, queries, mutations, or testing procedures against any
+third-party system unless you have explicit written authorization from the
+system owner.
+
+All data included in the testbed is synthetic. Do not add real personal data,
+medical data, production secrets, API keys, credentials, or tokens to this
+repository.
+
+This project is not an exploit framework and is not intended to support
+unauthorized access, scanning, denial-of-service activity, data exfiltration, or
+any other harmful activity. By using it, you are responsible for keeping the
+execution environment isolated and for complying with applicable laws,
+institutional rules, and authorization requirements.
+
+See also [`DISCLAIMER.md`](DISCLAIMER.md) and [`SECURITY.md`](SECURITY.md).
