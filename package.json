@@ -9,7 +9,7 @@
     "lab": "cross-env TEST_MODE=LAB_FULLY_VULNERABLE node src/server.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "private": false,
   "license": "MIT",
