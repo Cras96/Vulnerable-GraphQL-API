@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "lab": "cross-env TEST_MODE=LAB_FULLY_VULNERABLE node src/server.js"
+    "lab": "cross-env TEST_MODE=LAB_FULLY_VULNERABLE node src/server.js",
+    "lint": "eslint src/"
   },
   "engines": {
     "node": ">=20"
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
     "nodemon": "^3.0.2"
   }
 }
