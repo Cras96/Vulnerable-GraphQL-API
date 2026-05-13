@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+.git
+.github
+.gitignore
+.editorconfig
+.eslintrc.json
+.env
+.env.local
+.nvmrc
+uploads
+tests
+*.md
+LICENSE
+DISCLAIMER.md
+SECURITY.md
+PAYLOADS.graphql

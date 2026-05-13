@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    container_name: vulnerable-graphql-api
+    # Bind to loopback only - this image is deliberately vulnerable and must
+    # never be exposed beyond the host running the lab.
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      TEST_MODE: ${TEST_MODE:-LAB_FULLY_VULNERABLE}
+      PORT: 4000
+    networks:
+      - lab
+    restart: "no"
+
+networks:
+  lab:
+    driver: bridge
+    internal: false
