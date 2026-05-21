@@ -1,5 +1,9 @@
 # Vulnerable GraphQL API
 
+[![CI](https://github.com/Cras96/Vulnerable-GraphQL-API/actions/workflows/ci.yml/badge.svg)](https://github.com/Cras96/Vulnerable-GraphQL-API/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-43853d)](.nvmrc)
+
 Healthcare management GraphQL API used as a security testbed for a master's thesis on
 GraphQL API security at the University of the Aegean.
 
@@ -55,6 +59,33 @@ The active profile and per-feature toggles can be inspected at runtime with the
 | `nurse_jane`   | `nurse123`  | NURSE   |
 | `patient_john` | `patient123`| PATIENT |
 
+## Architecture
+
+```mermaid
+flowchart LR
+  client[GraphQL client<br/>browser, curl, scanner]
+  client -->|HTTP POST /graphql| apollo[Apollo Server<br/>:4000]
+
+  apollo --> ctx[auth/context<br/>JWT verify]
+  apollo --> resolvers[resolvers/]
+
+  resolvers --> guards[auth/guards<br/>role checks]
+  resolvers --> store[(db/store<br/>in-memory)]
+  resolvers --> services[services/]
+  resolvers --> telemetry[telemetry/<br/>pattern detection]
+
+  services --> shell[Shell<br/>exec]
+  services --> fs[Filesystem<br/>read / write]
+  services --> http[Outbound HTTP<br/>SSRF surface]
+
+  telemetry --> events[(events log)]
+
+  profile[config/profiles<br/>LAB / PENTEST / BASELINE]
+  profile -.-> apollo
+  profile -.-> guards
+  profile -.-> resolvers
+```
+
 ## Project layout
 
 ```
@@ -68,6 +99,7 @@ src/
 ├── services/           Search, filesystem, shell and HTTP helpers
 ├── telemetry/          Assessment event recording and pattern detection
 └── utils/              Sanitisation and rate limiting
+tests/                  Smoke tests (node --test)
 ```
 
 ## Assessment helpers
