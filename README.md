@@ -30,6 +30,47 @@ npm start
 
 The server listens on `http://localhost:4000/graphql` by default.
 
+## Running with Docker
+
+A `Dockerfile` and `docker-compose.yml` are provided so the lab can be brought
+up without installing Node directly on the host. The compose file binds the
+container to **`127.0.0.1` only**, so the API is not reachable from the
+network.
+
+Bring it up with the default `LAB_FULLY_VULNERABLE` profile:
+
+```bash
+docker compose up --build
+```
+
+Pick a different profile through the environment variable:
+
+```bash
+TEST_MODE=PENTEST_REALISTIC docker compose up --build
+TEST_MODE=BASELINE_HARDENED docker compose up --build
+```
+
+Then call the API at `http://localhost:4000/graphql` exactly as in the
+non-Docker setup.
+
+Tear the lab down and remove the image:
+
+```bash
+docker compose down --rmi local
+```
+
+Manual Docker (without compose):
+
+```bash
+docker build -t vulnerable-graphql-api .
+docker run --rm -p 127.0.0.1:4000:4000 \
+  -e TEST_MODE=LAB_FULLY_VULNERABLE \
+  vulnerable-graphql-api
+```
+
+> Never publish this image to a registry that is reachable from the public
+> internet. The container intentionally hosts an exploitable application.
+
 ## Security profiles
 
 The behaviour of the server is driven by the `TEST_MODE` environment variable, which
