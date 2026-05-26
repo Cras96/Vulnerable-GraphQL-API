@@ -168,7 +168,17 @@ mutation {
 ## Documentation
 
 - [`VULNERABILITIES.md`](VULNERABILITIES.md) - inventory of intentional weaknesses, grouped by category.
+- [`MITIGATIONS.md`](MITIGATIONS.md) - production-grade fix per weakness, with the matching profile knob.
 - [`PAYLOADS.graphql`](PAYLOADS.graphql) - example queries and mutations that exercise each weakness.
+- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) - step-by-step lab tour comparing the LAB and BASELINE profiles.
+- [`CHANGELOG.md`](CHANGELOG.md) - release notes.
+
+## Codespaces / Dev Containers
+
+The repository ships a `.devcontainer/` config. Opening the repo in GitHub
+Codespaces or in VS Code's Dev Containers extension gives a ready-to-run
+Node 20 environment with ESLint, REST Client and GraphQL extensions
+pre-installed and the lab profile pre-selected.
 
 ## Disclaimer and safe-use boundaries
 
