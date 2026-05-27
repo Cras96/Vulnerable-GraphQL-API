@@ -73,23 +73,51 @@ docker run --rm -p 127.0.0.1:4000:4000 \
 
 ## Security profiles
 
-The behaviour of the server is driven by the `TEST_MODE` environment variable, which
-selects one of three profiles defined in [`src/config/profiles.js`](src/config/profiles.js):
+The behaviour of the server is driven by the `TEST_MODE` environment variable,
+which selects one of three profiles defined in
+[`src/config/profiles.js`](src/config/profiles.js). Pick the profile that matches
+what you are trying to do:
 
-| Profile                | Purpose                                                         |
-| ---------------------- | --------------------------------------------------------------- |
-| `LAB_FULLY_VULNERABLE` | All weaknesses are reachable. Used for guided exploitation labs.|
-| `PENTEST_REALISTIC`    | Production-like, with common misconfigurations left in place.   |
-| `BASELINE_HARDENED`    | Dangerous features disabled. Used as a comparison baseline.     |
+| Profile                  | What it does                                            | When to use                                                       |
+| ------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `LAB_FULLY_VULNERABLE`   | All weaknesses are reachable                            | Demoing exploits, scanner tests, the walkthrough                  |
+| `PENTEST_REALISTIC`      | Production-like, with common misconfigurations          | Realistic pentest practice, default                               |
+| `BASELINE_HARDENED`      | Dangerous features and risky toggles disabled           | Verifying the fixes from [`MITIGATIONS.md`](MITIGATIONS.md)       |
 
-`PENTEST_REALISTIC` is the default. To launch the lab profile:
+### How to launch each profile
+
+The shortest form is the npm script. It works on Linux, macOS and Windows
+without any extra setup:
 
 ```bash
-npm run lab
+npm start          # PENTEST_REALISTIC (default)
+npm run lab        # LAB_FULLY_VULNERABLE
+npm run pentest    # PENTEST_REALISTIC (explicit)
+npm run hardened   # BASELINE_HARDENED
 ```
 
-The active profile and per-feature toggles can be inspected at runtime with the
-`securityProfile` query.
+If you prefer to set `TEST_MODE` yourself, the equivalent commands per shell
+are:
+
+```bash
+# Linux / macOS / WSL / Git Bash
+TEST_MODE=LAB_FULLY_VULNERABLE node src/server.js
+TEST_MODE=PENTEST_REALISTIC    node src/server.js
+TEST_MODE=BASELINE_HARDENED    node src/server.js
+```
+
+```powershell
+# Windows PowerShell
+$env:TEST_MODE = "LAB_FULLY_VULNERABLE"; node src/server.js
+$env:TEST_MODE = "PENTEST_REALISTIC";    node src/server.js
+$env:TEST_MODE = "BASELINE_HARDENED";    node src/server.js
+```
+
+Or via a `.env` file: copy `.env.example` to `.env`, set `TEST_MODE`, then
+`npm start`.
+
+The active profile is logged on startup and can be read at runtime through
+the `securityProfile` query.
 
 ## Default credentials
 
