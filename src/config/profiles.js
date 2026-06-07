@@ -26,19 +26,19 @@ const PROFILES = {
     introspectionEnabled: false,
     playgroundEnabled: false,
     debugEnabled: false,
-    verboseErrors: false,
+    verboseErrors: true,
     requireAuthForSensitiveQueries: true,
     enforceRoleChecks: true,
     allowDangerousReadOps: false,
     allowCommandExecution: false,
     allowSSRF: false,
-    allowMassAssignment: false,
-    weakPasswordPolicy: false,
+    allowMassAssignment: true,
+    weakPasswordPolicy: true,
     rateLimitLogin: true,
-    maxLoginAttemptsPerMinute: 10,
-    tokenExpiresIn: '1h',
+    maxLoginAttemptsPerMinute: 30,
+    tokenExpiresIn: '7d',
     strictTokenValidation: true,
-    hideSensitiveFields: true
+    hideSensitiveFields: false
   },
 
   BASELINE_HARDENED: {
