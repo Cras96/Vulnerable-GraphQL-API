@@ -208,6 +208,100 @@ Codespaces or in VS Code's Dev Containers extension gives a ready-to-run
 Node 20 environment with ESLint, REST Client and GraphQL extensions
 pre-installed and the lab profile pre-selected.
 
+## Recommended security testing tools
+
+The tools below are used in the accompanying thesis to demonstrate schema
+discovery, fingerprinting and automated security audits against the testbed.
+Each entry lists the upstream repository, an install command and an example
+invocation against the local API (`http://localhost:4000/graphql`).
+
+Before running them, bring the lab up with `npm run lab` (introspection
+enabled) unless noted otherwise.
+
+### GraphQL Voyager - schema visualization
+
+Renders the GraphQL schema as an interactive graph of types and
+relationships.
+
+- Repository: <https://github.com/IvanGoncharov/graphql-voyager>
+- Hosted demo: <https://graphql-kit.com/graphql-voyager>
+
+```bash
+# Run locally without installing
+npx graphql-voyager
+# then point it at http://localhost:4000/graphql
+```
+
+Requires `introspectionEnabled: true` (LAB profile).
+
+### InQL - Burp Suite extension for GraphQL
+
+Generates queries and mutations from introspection, supports query templating
+and provides an active scanner inside Burp.
+
+- Repository: <https://github.com/doyensec/inql>
+- Install: load via Burp Suite -> Extender -> BApp Store, or build from source.
+- CLI: `pip install inql`
+
+```bash
+# CLI introspection dump
+inql -t http://localhost:4000/graphql -o ./inql-out
+```
+
+Requires introspection (LAB profile).
+
+### graphql-cop - automated security checks
+
+Lightweight Python scanner that probes common GraphQL misconfigurations
+(introspection, field suggestions, batching, alias overloading, DoS,
+verbose errors and more).
+
+- Repository: <https://github.com/dolevf/graphql-cop>
+
+```bash
+git clone https://github.com/dolevf/graphql-cop.git
+cd graphql-cop
+pip install -r requirements.txt
+python3 graphql-cop.py -t http://localhost:4000/graphql
+```
+
+Works against any profile. The number of findings is highest in
+`LAB_FULLY_VULNERABLE` and lowest in `BASELINE_HARDENED`.
+
+### graphw00f - GraphQL engine fingerprinting
+
+Identifies the underlying GraphQL engine (Apollo, Hasura, GraphQL Yoga,
+Graphene, etc.) based on engine-specific behaviour.
+
+- Repository: <https://github.com/dolevf/graphw00f>
+
+```bash
+git clone https://github.com/dolevf/graphw00f.git
+cd graphw00f
+pip install -r requirements.txt
+python3 main.py -t http://localhost:4000 -f
+```
+
+Useful even when introspection is disabled, because it relies on
+engine-specific error messages and behaviour.
+
+### Clairvoyance - schema inference without introspection
+
+Brute-forces field and type names through error messages to reconstruct a
+schema when introspection is turned off.
+
+- Repository: <https://github.com/nikitastupin/clairvoyance>
+
+```bash
+pip install clairvoyance
+clairvoyance http://localhost:4000/graphql \
+  --wordlist ./wordlist.txt \
+  --output-dir ./clairvoyance-out
+```
+
+Run this against the `PENTEST_REALISTIC` or `BASELINE_HARDENED` profile to
+see schema inference in action with introspection disabled.
+
 ## Disclaimer and safe-use boundaries
 
 This repository exists exclusively for academic research and security education.
